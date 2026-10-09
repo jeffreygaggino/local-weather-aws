@@ -1,0 +1,12 @@
+node_modules/
+dist/
+
+# Terraform: state is local and per Session; the provider lock file is committed
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+.DS_Store
