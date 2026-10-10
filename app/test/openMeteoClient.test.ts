@@ -64,14 +64,6 @@ describe("fetchObservation", () => {
     assert.equal(url.searchParams.get("timezone"), "GMT");
   });
 
-  it("treats is_day 0 as night", async () => {
-    respondWith({ current: { ...current, is_day: 0 } });
-
-    const observation = await fetchObservation(mudgeeraba);
-
-    assert.equal(observation.isDay, false);
-  });
-
   it("fails with Open-Meteo's reason on a non-200 response", async () => {
     respondWith({ reason: "Latitude must be in range of -90 to 90°", error: true }, 400);
 

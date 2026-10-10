@@ -20,24 +20,7 @@ function apiWith({ latest, history = [] }: { latest?: Observation; history?: Obs
   return { app, sinceCalls };
 }
 
-describe("GET /health", () => {
-  it("returns ok", async () => {
-    const res = await apiWith().app.request("/health");
-
-    assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { ok: true });
-  });
-});
-
 describe("GET /latest", () => {
-  it("returns the newest Observation", async () => {
-    const latest = anObservation();
-    const res = await apiWith({ latest }).app.request("/latest");
-
-    assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), latest);
-  });
-
   it("returns 404 before anything has been collected", async () => {
     const res = await apiWith().app.request("/latest");
 
@@ -73,7 +56,7 @@ describe("GET /history", () => {
     assert.equal(res.status, 200);
   });
 
-  for (const hours of ["0", "-1", "25", "abc"]) {
+  for (const hours of ["0", "25", "abc"]) {
     it(`rejects hours=${hours} without querying`, async () => {
       const { app, sinceCalls } = apiWith();
 

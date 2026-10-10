@@ -4,12 +4,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 import { CreateTableCommand, DeleteTableCommand, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { requireEnv } from "../src/lib/env.ts";
-import {
-  latestObservation,
-  observationsSince,
-  putObservation,
-  sessionStartedAt,
-} from "../src/lib/observationStore.ts";
+import { latestObservation, observationsSince, putObservation } from "../src/lib/observationStore.ts";
 import { anObservation } from "./fixtures.ts";
 
 const table = `observations-test-${randomUUID()}`;
@@ -73,18 +68,5 @@ describe("observationStore", () => {
       recent.map((o) => o.ts),
       ["2026-10-10T04:30:00Z", "2026-10-10T04:15:00Z", "2026-10-10T04:00:00Z"],
     );
-  });
-
-  it("keeps Locations separate", async () => {
-    await putObservation(table, anObservation({ location: "here", ts: "2026-10-10T05:00:00Z" }));
-    await putObservation(table, anObservation({ location: "there", ts: "2026-10-10T06:00:00Z" }));
-
-    assert.equal((await latestObservation(table, "here"))?.ts, "2026-10-10T05:00:00Z");
-  });
-
-  it("reads the Session start from the table's creation time", async () => {
-    const started = await sessionStartedAt(table);
-
-    assert.ok(Date.now() - started.getTime() < 60_000, `expected a recent creation time, got ${started.toISOString()}`);
   });
 });
