@@ -111,13 +111,11 @@ tf-apply:
 tf-destroy:
 	@$(TF) destroy
 
-# Read from Terraform's outputs, so these only work after `make tf-apply`.
-ECR_URL = $(shell $(TF) output -raw ecr_repository_url 2>/dev/null)
-REGISTRY = $(firstword $(subst /, ,$(ECR_URL)))
+REGISTRY = 420653187671.dkr.ecr.ap-southeast-2.amazonaws.com
+ECR_URL = $(REGISTRY)/local-weather
 
 .PHONY: ecr-login
 ecr-login:
-	@test -n "$(ECR_URL)" || { echo "No ECR repository yet: run make tf-apply"; exit 1; }
 	@aws ecr get-login-password | docker login --username AWS --password-stdin $(REGISTRY)
 
 .PHONY: push
