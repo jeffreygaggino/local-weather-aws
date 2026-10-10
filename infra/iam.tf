@@ -1,6 +1,6 @@
 # execution role -> used by ECS to start a task: pull the image from ECR, write logs
 # task role      -> used by our code while it runs: read and write the Observations table
-# scheduler role -> used by EventBridge Scheduler to start collect tasks
+# scheduler role -> used by EventBridge Scheduler to start the collect and Watchdog tasks
 
 data "aws_iam_policy_document" "ecs_tasks_can_assume" {
   statement {
@@ -42,6 +42,19 @@ data "aws_iam_policy_document" "task" {
     ]
     resources = [aws_dynamodb_table.observations.arn]
   }
+
+  # PutMetricData can't be limited to a resource, so it's limited to our namespace instead.
+  statement {
+    sid       = "ObservationAgeMetric"
+    actions   = ["cloudwatch:PutMetricData"] # check
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = [local.metric_namespace]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "task" {
@@ -50,7 +63,7 @@ resource "aws_iam_role_policy" "task" {
   policy = data.aws_iam_policy_document.task.json
 }
 
-# Scheduler role: lets EventBridge Scheduler start collect tasks
+# Scheduler role: lets EventBridge Scheduler start the scheduled tasks
 
 data "aws_iam_policy_document" "scheduler_can_assume" {
   statement {
@@ -90,7 +103,7 @@ data "aws_iam_policy_document" "scheduler" {
 }
 
 resource "aws_iam_role_policy" "scheduler" {
-  name   = "run-collect"
+  name   = "run-scheduled-tasks"
   role   = aws_iam_role.scheduler.id
   policy = data.aws_iam_policy_document.scheduler.json
 }

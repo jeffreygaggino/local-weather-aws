@@ -143,6 +143,25 @@ run-collect:
 		--overrides '{"containerOverrides":[{"name":"app","command":["node","src/collect.ts"]}]}' \
 		--query 'tasks[0].taskArn' --output text
 
+.PHONY: run-check
+run-check:
+	@aws ecs run-task \
+		--cluster local-weather \
+		--task-definition local-weather \
+		--launch-type FARGATE \
+		--network-configuration "awsvpcConfiguration={subnets=[$(SUBNETS)],securityGroups=[$(JOBS_SG)],assignPublicIp=ENABLED}" \
+		--overrides '{"containerOverrides":[{"name":"app","command":["node","src/check.ts"]}]}' \
+		--query 'tasks[0].taskArn' --output text
+
+# Observation Age as CloudWatch sees it, over the last 2 hours.
+.PHONY: age
+age:
+	@aws cloudwatch get-metric-statistics --namespace LocalWeather --metric-name ObservationAgeMinutes \
+		--dimensions Name=Location,Value=$(LOCATION) \
+		--start-time $$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ) --end-time $$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+		--period 300 --statistics Maximum \
+		--query 'sort_by(Datapoints, &Timestamp)[].{time: Timestamp, ageMinutes: Maximum}' --output table
+
 .PHONY: logs
 logs:
 	@aws logs tail /ecs/local-weather --follow --since 15m

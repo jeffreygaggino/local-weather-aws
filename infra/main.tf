@@ -1,5 +1,6 @@
 locals {
-  name = "local-weather"
+  name             = "local-weather"
+  metric_namespace = "LocalWeather"
 }
 
 # Same keys as app/scripts/create-local-table.ts; the two must stay in step.

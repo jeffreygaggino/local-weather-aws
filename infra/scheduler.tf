@@ -1,14 +1,25 @@
-# EventBridge Scheduler runs collect as a Fargate task every 15 minutes, just after
-# each Open-Meteo Slot opens. Failed attempts land in the dead-letter queue.
+# EventBridge Scheduler runs two jobs as Fargate tasks:
+#   collect  -> just after each Open-Meteo Slot opens
+#   watchdog -> midway between collect runs, so a healthy Observation Age is about 9 minutes
+# Failed attempts to start a task land in the dead-letter queue.
+
+locals {
+  scheduled_jobs = {
+    collect  = { cron = "cron(2/15 * * * ? *)", command = ["node", "src/collect.ts"] }
+    watchdog = { cron = "cron(9/15 * * * ? *)", command = ["node", "src/check.ts"] }
+  }
+}
 
 resource "aws_sqs_queue" "scheduler_dlq" {
   name                      = "${local.name}-scheduler-dlq"
   message_retention_seconds = 345600 # 4 days
 }
 
-resource "aws_scheduler_schedule" "collect" {
-  name                         = "${local.name}-collect"
-  schedule_expression          = "cron(2/15 * * * ? *)"
+resource "aws_scheduler_schedule" "job" {
+  for_each = local.scheduled_jobs
+
+  name                         = "${local.name}-${each.key}"
+  schedule_expression          = each.value.cron
   schedule_expression_timezone = "Australia/Brisbane"
 
   flexible_time_window {
@@ -32,7 +43,7 @@ resource "aws_scheduler_schedule" "collect" {
 
     input = jsonencode({
       containerOverrides = [
-        { name = "app", command = ["node", "src/collect.ts"] }
+        { name = "app", command = each.value.command }
       ]
     })
 

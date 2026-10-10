@@ -36,6 +36,7 @@ resource "aws_ecs_task_definition" "app" {
         { name = "LOCATION", value = var.location.slug },
         { name = "LATITUDE", value = tostring(var.location.latitude) },
         { name = "LONGITUDE", value = tostring(var.location.longitude) },
+        { name = "METRIC_NAMESPACE", value = local.metric_namespace },
       ]
       logConfiguration = {
         logDriver = "awslogs"
