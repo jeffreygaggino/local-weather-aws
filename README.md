@@ -24,7 +24,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - Node 22.18+ and npm, for typechecking and editor support
 - AWS CLI, for inspecting tables
 - jq, for pretty-printing API responses
-- Terraform 1.10+, and an AWS CLI profile named `weather` (`aws login --profile weather`) for the AWS targets
+- Terraform 1.10+ and an AWS CLI profile named `weather`, for the AWS targets (see [AWS](#aws))
 
 ## Local development
 
@@ -99,20 +99,56 @@ Naming: `*Client.ts` talks to an external API, `*Store.ts` reads and writes a ta
 
 ## AWS
 
+Everything in AWS is created and destroyed together; a Session is the time between the two. Nothing is left running in between.
+
+### One-time setup
+
+1. An AWS account, with MFA on the root user and a monthly cost budget created in the Billing console.
+2. An IAM user with console access, MFA and the `AdministratorAccess` policy. Do not enable IAM Identity Center or AWS Organizations: on a free-plan account, creating an organization switches to paid and ends the free credits.
+3. A CLI profile for that user:
+   ```sh
+   aws configure set region ap-southeast-2 --profile weather
+   aws login --profile weather
+   aws sts get-caller-identity --profile weather   # Arn should end in :user/<you>
+   ```
+4. Download the Terraform provider: `make tf-init`.
+
+`REGISTRY` in the Makefile contains the AWS account ID; change it if you use a different account.
+
+### Starting a Session
+
 ```sh
-aws login --profile weather   # temporary credentials from your console sign-in
-make tf-init                  # once, downloads the AWS provider
-make tf-plan                  # what would change
+aws login --profile weather   # if the previous login has expired
+make tf-apply                 # network, IAM roles, table, ECR repository, cluster, task definition
 make push                     # build the arm64 image and push it, tagged with the git SHA
-make tf-apply                 # create the network, IAM roles, table, ECR repository, cluster and task definition
 make run-collect              # run collect once as a Fargate task
-make logs                     # follow the task logs (start this first; tasks take ~1 min to start)
+make logs                     # follow task logs (tasks take about a minute to start)
 make aws-db-history           # Observations in the real table
-make ecr-images               # what's in the repository
-make tf-destroy               # remove everything (ECR images included)
 ```
 
-Commit before `make push` and `make tf-apply`: both use the git SHA as the image tag, so the task definition points at the image you pushed.
+`tf-apply` comes before `push` because the ECR repository has to exist before an image can be pushed to it. The task definition can refer to an image tag that hasn't been pushed yet; it only matters once a task runs.
+
+Commit before `make tf-apply` and `make push`: both tag with the current git SHA, so the task definition points at the image you pushed. With uncommitted changes the tag ends in `-dirty`.
+
+### Ending a Session
+
+```sh
+make tf-destroy               # removes everything, including ECR images, logs and Observations
+```
+
+Task definitions are deregistered rather than deleted, so `local-weather:<n>` stays listed as INACTIVE in the ECS console; the next apply creates the next revision.
+
+### AWS make targets
+
+| Target | Does |
+| --- | --- |
+| `tf-init` | Download the Terraform provider (once per clone) |
+| `tf-plan` / `tf-apply` / `tf-destroy` | Plan, create or remove the stack, tagged with the current git SHA |
+| `push` | Log in to ECR, build the arm64 image and push it |
+| `ecr-images` | List image tags in the repository |
+| `run-collect` | Run collect once as a Fargate task |
+| `logs` | Follow the task logs in CloudWatch |
+| `aws-db-history` | Observations in the real table |
 
 Terraform state is local (`infra/terraform.tfstate`, gitignored); the provider lock file is committed.
 
