@@ -17,3 +17,11 @@ output "cluster_name" {
 output "task_definition_arn" {
   value = aws_ecs_task_definition.app.arn
 }
+
+output "jobs_security_group_id" {
+  value = aws_security_group.jobs.id
+}
+
+output "dlq_url" {
+  value = aws_sqs_queue.scheduler_dlq.url
+}

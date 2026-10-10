@@ -1,6 +1,6 @@
-# Two roles, two jobs:
-#   execution role -> used by ECS to start the task: pull the image from ECR, write logs
-#   task role      -> used by our code while it runs: read and write the Observations table
+# execution role -> used by ECS to start a task: pull the image from ECR, write logs
+# task role      -> used by our code while it runs: read and write the Observations table
+# scheduler role -> used by EventBridge Scheduler to start collect tasks
 
 data "aws_iam_policy_document" "ecs_tasks_can_assume" {
   statement {
@@ -48,4 +48,49 @@ resource "aws_iam_role_policy" "task" {
   name   = "observations"
   role   = aws_iam_role.task.id
   policy = data.aws_iam_policy_document.task.json
+}
+
+# Scheduler role: lets EventBridge Scheduler start collect tasks
+
+data "aws_iam_policy_document" "scheduler_can_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["scheduler.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "scheduler" {
+  name               = "${local.name}-scheduler"
+  assume_role_policy = data.aws_iam_policy_document.scheduler_can_assume.json
+}
+
+data "aws_iam_policy_document" "scheduler" {
+  statement {
+    sid       = "StartTasks"
+    actions   = ["ecs:RunTask"]
+    resources = ["${aws_ecs_task_definition.app.arn_without_revision}:*"]
+  }
+
+  # Starting a task hands it the execution and task roles.
+  statement {
+    sid       = "HandRolesToTasks"
+    actions   = ["iam:PassRole"]
+    resources = [aws_iam_role.execution.arn, aws_iam_role.task.arn]
+  }
+
+  statement {
+    sid       = "ReportFailures"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.scheduler_dlq.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "scheduler" {
+  name   = "run-collect"
+  role   = aws_iam_role.scheduler.id
+  policy = data.aws_iam_policy_document.scheduler.json
 }

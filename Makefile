@@ -127,8 +127,9 @@ push: ecr-login
 ecr-images:
 	@aws ecr list-images --repository-name local-weather --output table
 
-# Subnet IDs change every time the VPC is recreated, so they're read from Terraform.
+# Subnet and security group IDs change every time the stack is recreated, so they're read from Terraform.
 SUBNETS = $(shell $(TF) output -json public_subnet_ids | jq -r 'join(",")')
+JOBS_SG = $(shell $(TF) output -raw jobs_security_group_id)
 
 .PHONY: run-collect
 run-collect:
@@ -136,7 +137,7 @@ run-collect:
 		--cluster local-weather \
 		--task-definition local-weather \
 		--launch-type FARGATE \
-		--network-configuration "awsvpcConfiguration={subnets=[$(SUBNETS)],assignPublicIp=ENABLED}" \
+		--network-configuration "awsvpcConfiguration={subnets=[$(SUBNETS)],securityGroups=[$(JOBS_SG)],assignPublicIp=ENABLED}" \
 		--overrides '{"containerOverrides":[{"name":"app","command":["node","src/collect.ts"]}]}' \
 		--query 'tasks[0].taskArn' --output text
 
@@ -170,3 +171,11 @@ aws-latest:
 .PHONY: aws-history
 aws-history:
 	@curl -sS "$(API)/history?hours=$(HOURS)" | jq .
+
+# Why the scheduler failed to start a task, if it has. Reading doesn't remove the messages.
+.PHONY: dlq
+dlq:
+	@aws sqs receive-message --queue-url $$($(TF) output -raw dlq_url) \
+		--max-number-of-messages 10 --visibility-timeout 0 --message-attribute-names All \
+		--query 'Messages[].MessageAttributes.{error: ERROR_CODE.StringValue, message: ERROR_MESSAGE.StringValue}' \
+		--output table

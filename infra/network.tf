@@ -57,3 +57,46 @@ resource "aws_route_table_association" "public" {
   subnet_id      = each.value.id
   route_table_id = aws_route_table.public.id
 }
+
+# Security groups (firewalls on each task's network card)
+
+# serve: port 8080 from the IP that ran `terraform apply` and nowhere else.
+data "http" "my_ip" {
+  url = "https://checkip.amazonaws.com"
+}
+
+resource "aws_security_group" "serve" {
+  name        = "${local.name}-serve"
+  description = "serve API"
+  vpc_id      = aws_vpc.main.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "serve_from_me" {
+  security_group_id = aws_security_group.serve.id
+  description       = "API from the IP that ran terraform apply"
+  ip_protocol       = "tcp"
+  from_port         = 8080
+  to_port           = 8080
+  cidr_ipv4         = "${chomp(data.http.my_ip.response_body)}/32"
+}
+
+resource "aws_vpc_security_group_egress_rule" "serve_out" {
+  security_group_id = aws_security_group.serve.id
+  description       = "ECR, CloudWatch Logs, DynamoDB"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
+
+# Scheduled jobs: outbound only.
+resource "aws_security_group" "jobs" {
+  name        = "${local.name}-jobs"
+  description = "Scheduled jobs: outbound only"
+  vpc_id      = aws_vpc.main.id
+}
+
+resource "aws_vpc_security_group_egress_rule" "jobs_out" {
+  security_group_id = aws_security_group.jobs.id
+  description       = "Open-Meteo, ECR, CloudWatch Logs, DynamoDB"
+  ip_protocol       = "-1"
+  cidr_ipv4         = "0.0.0.0/0"
+}
