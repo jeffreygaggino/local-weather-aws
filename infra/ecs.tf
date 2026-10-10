@@ -28,6 +28,9 @@ resource "aws_ecs_task_definition" "app" {
       name      = "app"
       image     = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
       essential = true
+      portMappings = [
+        { containerPort = 8080, protocol = "tcp" }
+      ]
       environment = [
         { name = "TABLE", value = aws_dynamodb_table.observations.name },
         { name = "LOCATION", value = var.location.slug },

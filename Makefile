@@ -148,3 +148,25 @@ logs:
 aws-db-history:
 	@aws dynamodb query $(LOCATION_QUERY) \
 		--query 'Items[].{ts: ts.S, temperatureC: temperatureC.N, collectedAt: collectedAt.S}' --output table
+
+# The serve task's public IP: service → its running task → the task's network card → that card's public IP.
+# It changes whenever the task is replaced, so it's looked up each time.
+.PHONY: ip
+ip:
+	@task=$$(aws ecs list-tasks --cluster local-weather --service-name local-weather-serve --query 'taskArns[0]' --output text) && \
+	eni=$$(aws ecs describe-tasks --cluster local-weather --tasks $$task --query "tasks[0].attachments[0].details[?name=='networkInterfaceId'].value" --output text) && \
+	aws ec2 describe-network-interfaces --network-interface-ids $$eni --query 'NetworkInterfaces[0].Association.PublicIp' --output text
+
+API = http://$$($(MAKE) -s --no-print-directory ip):8080
+
+.PHONY: aws-health
+aws-health:
+	@curl -sS $(API)/health | jq .
+
+.PHONY: aws-latest
+aws-latest:
+	@curl -sS $(API)/latest | jq .
+
+.PHONY: aws-history
+aws-history:
+	@curl -sS "$(API)/history?hours=$(HOURS)" | jq .
