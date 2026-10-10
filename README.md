@@ -8,7 +8,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 
 - [x] Collector fetches the current Observation from Open-Meteo
 - [x] Observations stored in DynamoDB (local)
-- [ ] API: `/health`, `/latest`, `/history`
+- [x] API: `/health`, `/latest`, `/history`
 - [ ] Watchdog: Observation Age metric
 - [ ] Container image
 - [ ] Terraform: DynamoDB, ECR
@@ -22,6 +22,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - Node 22.18+ (runs the TypeScript directly, no build step)
 - Docker, for DynamoDB Local
 - AWS CLI, for inspecting tables
+- jq, for pretty-printing API responses
 
 ## Local development
 
@@ -30,6 +31,8 @@ make install     # npm install in app/
 make local       # start DynamoDB Local and create the table
 make collect     # fetch and store one Observation
 make db-history  # list stored Observations, newest first
+make serve       # run the API on :8080, restarting on file changes
+make latest      # in another terminal: GET /latest
 make local-down  # stop DynamoDB Local (data is in-memory and is discarded)
 ```
 
@@ -44,9 +47,19 @@ Local config lives in [`app/local.env`](app/local.env). `DYNAMODB_ENDPOINT` poin
 | `local` | Start DynamoDB Local and create the table |
 | `local-down` | Stop DynamoDB Local |
 | `collect` | Fetch the current Observation and store it |
+| `serve` | Run the API locally with `--watch` |
+| `health` / `latest` / `history` | Call the local API (`make history HOURS=2`) |
 | `db-scan` | Every item in the table, raw DynamoDB format |
 | `db-latest` | Newest Observation for the Location |
 | `db-history` | All Observations for the Location, newest first |
+
+## API
+
+| Route | Returns |
+| --- | --- |
+| `GET /health` | `{ "ok": true }` |
+| `GET /latest` | Newest Observation, or `404` before the first one is collected |
+| `GET /history?hours=6` | Observations from the last `hours` (default 6, max 24), newest first |
 
 ## Data model
 

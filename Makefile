@@ -3,6 +3,8 @@ include app/local.env
 DDB = AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) \
 	aws dynamodb --endpoint-url $(DYNAMODB_ENDPOINT) --region $(AWS_REGION)
 
+HOURS ?= 6
+
 LOCATION_QUERY = --table-name $(TABLE) \
 	--key-condition-expression '\#l = :l' \
 	--expression-attribute-names '{"\#l":"location"}' \
@@ -31,6 +33,25 @@ local-down:
 .PHONY: collect
 collect:
 	@cd app && npm run -s collect
+
+.PHONY: serve
+serve:
+	@cd app && npm run -s serve
+
+
+# ── Call the local API (run `make serve` in another terminal) ────────────────
+
+.PHONY: health
+health:
+	@curl -sS localhost:$(PORT)/health | jq .
+
+.PHONY: latest
+latest:
+	@curl -sS localhost:$(PORT)/latest | jq .
+
+.PHONY: history
+history:
+	@curl -sS "localhost:$(PORT)/history?hours=$(HOURS)" | jq .
 
 
 # ── Inspect local data ────────────────────────────────────────────────────────
