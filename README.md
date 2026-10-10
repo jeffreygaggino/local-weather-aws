@@ -12,7 +12,8 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - [x] Watchdog: computes Observation Age (publishing to CloudWatch comes with the alarms)
 - [x] Container image (arm64, runs `serve`, `collect` or `check`)
 - [x] Terraform: DynamoDB, ECR (image pushed by hand)
-- [ ] ECS Fargate task and service
+- [x] ECS Fargate task, run by hand (`make run-collect`)
+- [ ] ECS service for the API
 - [ ] EventBridge Scheduler and dead-letter queue
 - [ ] Alarms and budget
 - [ ] `make up` / `make down`, CI
@@ -102,11 +103,16 @@ Naming: `*Client.ts` talks to an external API, `*Store.ts` reads and writes a ta
 aws login --profile weather   # temporary credentials from your console sign-in
 make tf-init                  # once, downloads the AWS provider
 make tf-plan                  # what would change
-make tf-apply                 # create the DynamoDB table and ECR repository
 make push                     # build the arm64 image and push it, tagged with the git SHA
+make tf-apply                 # create the network, IAM roles, table, ECR repository, cluster and task definition
+make run-collect              # run collect once as a Fargate task
+make logs                     # follow the task logs (start this first; tasks take ~1 min to start)
+make aws-db-history           # Observations in the real table
 make ecr-images               # what's in the repository
 make tf-destroy               # remove everything (ECR images included)
 ```
+
+Commit before `make push` and `make tf-apply`: both use the git SHA as the image tag, so the task definition points at the image you pushed.
 
 Terraform state is local (`infra/terraform.tfstate`, gitignored); the provider lock file is committed.
 
