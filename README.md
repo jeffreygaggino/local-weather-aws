@@ -9,7 +9,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - [x] Collector fetches the current Observation from Open-Meteo
 - [x] Observations stored in DynamoDB (local)
 - [x] API: `/health`, `/latest`, `/history`
-- [ ] Watchdog: Observation Age metric
+- [x] Watchdog: computes Observation Age (publishing to CloudWatch comes with the alarms)
 - [ ] Container image
 - [ ] Terraform: DynamoDB, ECR
 - [ ] ECS Fargate task and service
@@ -47,6 +47,7 @@ Local config lives in [`app/local.env`](app/local.env). `DYNAMODB_ENDPOINT` poin
 | `local` | Start DynamoDB Local and create the table |
 | `local-down` | Stop DynamoDB Local |
 | `collect` | Fetch the current Observation and store it |
+| `check` | Run the Watchdog: print Observation Age |
 | `serve` | Run the API locally with `--watch` |
 | `health` / `latest` / `history` | Call the local API (`make history HOURS=2`) |
 | `db-scan` | Every item in the table, raw DynamoDB format |
@@ -59,6 +60,7 @@ Local config lives in [`app/local.env`](app/local.env). `DYNAMODB_ENDPOINT` poin
 app/
 ├── src/
 │   ├── collect.ts               entrypoint: fetch an Observation and store it
+│   ├── check.ts                 entrypoint: Watchdog, measures Observation Age
 │   ├── serve.ts                 entrypoint: HTTP API
 │   └── lib/
 │       ├── openMeteoClient.ts   client: Open-Meteo API

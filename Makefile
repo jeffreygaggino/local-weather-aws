@@ -34,6 +34,10 @@ local-down:
 collect:
 	@cd app && npm run -s collect
 
+.PHONY: check
+check:
+	@cd app && npm run -s check
+
 .PHONY: serve
 serve:
 	@cd app && npm run -s serve

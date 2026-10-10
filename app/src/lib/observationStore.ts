@@ -1,4 +1,4 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DescribeTableCommand, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, paginateQuery } from "@aws-sdk/lib-dynamodb";
 import type { Observation } from "./observation.ts";
 
@@ -40,4 +40,11 @@ export async function observationsSince(table: string, location: string, since: 
   const observations: Observation[] = [];
   for await (const page of pages) observations.push(...((page.Items ?? []) as Observation[]));
   return observations;
+}
+
+/** The table is created when a Session starts, so its creation time marks the start of the Session. */
+export async function sessionStartedAt(table: string): Promise<Date> {
+  const { Table } = await client.send(new DescribeTableCommand({ TableName: table }));
+  if (!Table?.CreationDateTime) throw new Error(`Table ${table} has no CreationDateTime`);
+  return Table.CreationDateTime;
 }
