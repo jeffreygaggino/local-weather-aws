@@ -126,3 +126,25 @@ push: ecr-login
 .PHONY: ecr-images
 ecr-images:
 	@aws ecr list-images --repository-name local-weather --output table
+
+# Subnet IDs change every time the VPC is recreated, so they're read from Terraform.
+SUBNETS = $(shell $(TF) output -json public_subnet_ids | jq -r 'join(",")')
+
+.PHONY: run-collect
+run-collect:
+	@aws ecs run-task \
+		--cluster local-weather \
+		--task-definition local-weather \
+		--launch-type FARGATE \
+		--network-configuration "awsvpcConfiguration={subnets=[$(SUBNETS)],assignPublicIp=ENABLED}" \
+		--overrides '{"containerOverrides":[{"name":"app","command":["node","src/collect.ts"]}]}' \
+		--query 'tasks[0].taskArn' --output text
+
+.PHONY: logs
+logs:
+	@aws logs tail /ecs/local-weather --follow --since 15m
+
+.PHONY: aws-db-history
+aws-db-history:
+	@aws dynamodb query $(LOCATION_QUERY) \
+		--query 'Items[].{ts: ts.S, temperatureC: temperatureC.N, collectedAt: collectedAt.S}' --output table
