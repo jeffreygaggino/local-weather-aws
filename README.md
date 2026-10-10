@@ -11,7 +11,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - [x] API: `/health`, `/latest`, `/history`
 - [x] Watchdog: computes Observation Age (publishing to CloudWatch comes with the alarms)
 - [x] Container image (arm64, runs `serve`, `collect` or `check`)
-- [ ] Terraform: DynamoDB, ECR
+- [x] Terraform: DynamoDB, ECR (image pushed by hand)
 - [ ] ECS Fargate task and service
 - [ ] EventBridge Scheduler and dead-letter queue
 - [ ] Alarms and budget
@@ -23,6 +23,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - Node 22.18+ and npm, for typechecking and editor support
 - AWS CLI, for inspecting tables
 - jq, for pretty-printing API responses
+- Terraform 1.10+, and an AWS CLI profile named `weather` (`aws login --profile weather`) for the AWS targets
 
 ## Local development
 
@@ -94,6 +95,20 @@ app/
 ```
 
 Naming: `*Client.ts` talks to an external API, `*Store.ts` reads and writes a table, plain nouns are types. Entrypoints only wire these together.
+
+## AWS
+
+```sh
+aws login --profile weather   # temporary credentials from your console sign-in
+make tf-init                  # once, downloads the AWS provider
+make tf-plan                  # what would change
+make tf-apply                 # create the DynamoDB table and ECR repository
+make push                     # build the arm64 image and push it, tagged with the git SHA
+make ecr-images               # what's in the repository
+make tf-destroy               # remove everything (ECR images included)
+```
+
+Terraform state is local (`infra/terraform.tfstate`, gitignored); the provider lock file is committed.
 
 ## Tests
 

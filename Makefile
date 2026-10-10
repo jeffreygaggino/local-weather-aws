@@ -85,3 +85,40 @@ db-latest:
 db-history:
 	@$(DDB) query $(LOCATION_QUERY) \
 		--query 'Items[].{ts: ts.S, temperatureC: temperatureC.N, collectedAt: collectedAt.S}' --output table
+
+
+# ── AWS (run `aws login --profile weather` first) ─────────────────────────────
+
+export AWS_PROFILE ?= weather
+TF = terraform -chdir=infra
+# Git SHA of HEAD, marked -dirty when there are uncommitted changes.
+TAG := $(shell git rev-parse --short HEAD)$(shell [ -n "$$(git status --porcelain)" ] && echo -dirty)
+
+.PHONY: tf-init
+tf-init:
+	@$(TF) init
+
+.PHONY: tf-plan
+tf-plan:
+	@$(TF) plan
+
+.PHONY: tf-apply
+tf-apply:
+	@$(TF) apply
+
+.PHONY: tf-destroy
+tf-destroy:
+	@$(TF) destroy
+
+.PHONY: push
+push:
+	@repo=$$($(TF) output -raw ecr_repository_url) && \
+	aws ecr get-login-password | docker login --username AWS --password-stdin "$${repo%%/*}" && \
+	docker buildx build --platform linux/arm64 --provenance=false -t "$$repo:$(TAG)" --push . && \
+	echo "Pushed $$repo:$(TAG)"
+
+.PHONY: ecr-images
+ecr-images:
+	@aws ecr describe-images --repository-name local-weather \
+		--query 'imageDetails[].{tags: join(`,`, imageTags), pushed: imagePushedAt, sizeMB: to_string(imageSizeInBytes)}' \
+		--output table
