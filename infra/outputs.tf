@@ -5,3 +5,7 @@ output "table_name" {
 output "ecr_repository_url" {
   value = aws_ecr_repository.app.repository_url
 }
+
+output "public_subnet_ids" {
+  value = [for subnet in aws_subnet.public : subnet.id]
+}
