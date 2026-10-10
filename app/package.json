@@ -7,10 +7,15 @@
   },
   "scripts": {
     "collect": "node --env-file=local.env src/collect.ts",
+    "db:create": "node --env-file=local.env scripts/create-local-table.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1149.0",
+    "@aws-sdk/lib-dynamodb": "^3.1149.0"
   }
 }
