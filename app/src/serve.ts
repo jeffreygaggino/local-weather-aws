@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { requireEnv } from "./lib/env.ts";
-import { latestObservation, observationsSince } from "./lib/observations.ts";
+import { latestObservation, observationsSince } from "./lib/observationStore.ts";
 
 const table = requireEnv("TABLE");
 const location = requireEnv("LOCATION");

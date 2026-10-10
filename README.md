@@ -53,6 +53,26 @@ Local config lives in [`app/local.env`](app/local.env). `DYNAMODB_ENDPOINT` poin
 | `db-latest` | Newest Observation for the Location |
 | `db-history` | All Observations for the Location, newest first |
 
+## Code layout
+
+```
+app/
+├── src/
+│   ├── collect.ts               entrypoint: fetch an Observation and store it
+│   ├── serve.ts                 entrypoint: HTTP API
+│   └── lib/
+│       ├── openMeteoClient.ts   client: Open-Meteo API
+│       ├── observationStore.ts  store: Observations table in DynamoDB
+│       ├── observation.ts       type: Observation
+│       ├── location.ts          type: Location, read from env
+│       └── env.ts               config helpers
+├── scripts/
+│   └── create-local-table.ts    creates the table in DynamoDB Local
+└── local.env                    local config
+```
+
+Naming: `*Client.ts` talks to an external API, `*Store.ts` reads and writes a table, plain nouns are types. Entrypoints only wire these together.
+
 ## API
 
 | Route | Returns |
