@@ -14,7 +14,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - [x] Terraform: DynamoDB, ECR (image pushed by hand)
 - [x] ECS Fargate task, run by hand (`make run-collect`)
 - [x] ECS service keeping the API running (port 8080, your IP only)
-- [ ] EventBridge Scheduler and dead-letter queue
+- [x] EventBridge Scheduler runs collect every 15 minutes, with a dead-letter queue
 - [ ] Alarms and budget
 - [ ] `make up` / `make down`, CI
 
@@ -122,14 +122,14 @@ aws login --profile weather   # if the previous login has expired
 make tf-apply                 # network, IAM roles, table, ECR repository, cluster, task definition
 make push                     # build the arm64 image and push it, tagged with the git SHA
 make run-collect              # run collect once as a Fargate task
-make logs                     # follow task logs (tasks take about a minute to start)
+make logs                     # follow task logs; collect runs on its own at :02, :17, :32 and :47
 make aws-db-history           # Observations in the real table
 make aws-latest               # the API, running as an ECS service
 ```
 
 `tf-apply` comes before `push` because the ECR repository has to exist before an image can be pushed to it. The task definition can refer to an image tag that hasn't been pushed yet; it only matters once a task runs.
 
-Commit before `make tf-apply` and `make push`: both tag with the current git SHA, so the task definition points at the image you pushed. With uncommitted changes the tag ends in `-dirty`.
+The image tag is the hash of the last commit that changed the image's inputs (`app/src`, `app/package*.json`, `Dockerfile`, `.dockerignore`). After changing any of those, commit, then `make push`, then `make tf-apply`. Commits that only touch Terraform or docs keep the same tag, so `make tf-apply` alone is enough. Uncommitted changes to the image inputs make the tag end in `-dirty`.
 
 ### Ending a Session
 
@@ -147,11 +147,12 @@ Task definitions are deregistered rather than deleted, so `local-weather:<n>` st
 | `tf-plan` / `tf-apply` / `tf-destroy` | Plan, create or remove the stack, tagged with the current git SHA |
 | `push` | Log in to ECR, build the arm64 image and push it |
 | `ecr-images` | List image tags in the repository |
-| `run-collect` | Run collect once as a Fargate task |
+| `run-collect` | Run collect once now, instead of waiting for the schedule |
 | `logs` | Follow the task logs in CloudWatch |
 | `aws-db-history` | Observations in the real table |
 | `ip` | Public IP of the running serve task (changes whenever the task is replaced) |
 | `aws-health` / `aws-latest` / `aws-history` | Call the API in AWS (`make aws-history HOURS=2`) |
+| `dlq` | Why the scheduler failed to start a task, if it has (empty means no failures) |
 
 The API only accepts connections from the IP that ran `make tf-apply`. If your IP changes (new network, hotspot), the `aws-*` targets time out; run `make tf-apply` again to update the rule.
 

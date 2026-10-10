@@ -92,8 +92,10 @@ db-history:
 export AWS_PROFILE ?= weather
 # All runs in the infra folder
 TF = terraform -chdir=infra
-# Git SHA of HEAD, marked -dirty when there are uncommitted changes.
-TAG := $(shell git rev-parse --short HEAD)$(shell [ -n "$$(git status --porcelain)" ] && echo -dirty)
+# The files that go into the image. The tag is the last commit that changed any of them,
+# so Terraform-only or docs commits keep the same tag and need no push.
+IMAGE_INPUTS = Dockerfile .dockerignore app/package.json app/package-lock.json app/src
+TAG := $(shell git log -1 --format=%h -- $(IMAGE_INPUTS))$(shell [ -n "$$(git status --porcelain -- $(IMAGE_INPUTS))" ] && echo -dirty)
 
 .PHONY: tf-init
 tf-init:
