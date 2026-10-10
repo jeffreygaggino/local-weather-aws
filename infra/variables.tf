@@ -20,3 +20,8 @@ variable "location" {
     longitude = 153.37
   }
 }
+
+variable "alert_email" {
+  description = "Where alarm emails go. Set it in terraform.tfvars (gitignored)."
+  type        = string
+}

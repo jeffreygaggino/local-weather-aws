@@ -200,3 +200,14 @@ dlq:
 		--max-number-of-messages 10 --visibility-timeout 0 --message-attribute-names All \
 		--query 'Messages[].MessageAttributes.{error: ERROR_CODE.StringValue, message: ERROR_MESSAGE.StringValue}' \
 		--output table
+
+.PHONY: alarms
+alarms:
+	@aws cloudwatch describe-alarms --alarm-name-prefix local-weather \
+		--query 'MetricAlarms[].{alarm: AlarmName, state: StateValue, reason: StateReason}' --output table
+
+# Sends a test email through the real alarm. It returns to its true state at the next evaluation.
+.PHONY: alarm-test
+alarm-test:
+	@aws cloudwatch set-alarm-state --alarm-name local-weather-observation-stale \
+		--state-value ALARM --state-reason "Testing the email from make alarm-test"
