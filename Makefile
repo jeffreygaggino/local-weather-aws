@@ -90,6 +90,7 @@ db-history:
 # ── AWS (run `aws login --profile weather` first) ─────────────────────────────
 
 export AWS_PROFILE ?= weather
+# All runs in the infra folder
 TF = terraform -chdir=infra
 # Git SHA of HEAD, marked -dirty when there are uncommitted changes.
 TAG := $(shell git rev-parse --short HEAD)$(shell [ -n "$$(git status --porcelain)" ] && echo -dirty)
@@ -110,15 +111,20 @@ tf-apply:
 tf-destroy:
 	@$(TF) destroy
 
+# Read from Terraform's outputs, so these only work after `make tf-apply`.
+ECR_URL = $(shell $(TF) output -raw ecr_repository_url 2>/dev/null)
+REGISTRY = $(firstword $(subst /, ,$(ECR_URL)))
+
+.PHONY: ecr-login
+ecr-login:
+	@test -n "$(ECR_URL)" || { echo "No ECR repository yet: run make tf-apply"; exit 1; }
+	@aws ecr get-login-password | docker login --username AWS --password-stdin $(REGISTRY)
+
 .PHONY: push
-push:
-	@repo=$$($(TF) output -raw ecr_repository_url) && \
-	aws ecr get-login-password | docker login --username AWS --password-stdin "$${repo%%/*}" && \
-	docker buildx build --platform linux/arm64 --provenance=false -t "$$repo:$(TAG)" --push . && \
-	echo "Pushed $$repo:$(TAG)"
+push: ecr-login
+	@docker buildx build --platform linux/arm64 --provenance=false -t $(ECR_URL):$(TAG) --push .
+	@echo "Pushed $(ECR_URL):$(TAG)"
 
 .PHONY: ecr-images
 ecr-images:
-	@aws ecr describe-images --repository-name local-weather \
-		--query 'imageDetails[].{tags: join(`,`, imageTags), pushed: imagePushedAt, sizeMB: to_string(imageSizeInBytes)}' \
-		--output table
+	@aws ecr list-images --repository-name local-weather --output table
