@@ -108,6 +108,16 @@ up: preflight ecr-repo push tf-apply
 .PHONY: down
 down: tf-destroy
 
+# Is anything from this project running in AWS right now?
+.PHONY: status
+status:
+	@resources=$$($(TF) state list 2>/dev/null | grep -vc '^data\.'); \
+	clusters=$$(aws ecs list-clusters --query 'length(clusterArns)' --output text); \
+	echo "Terraform resources:  $$resources"; \
+	echo "ECS clusters in AWS:  $$clusters"; \
+	if [ "$$resources" -gt 0 ] || [ "$$clusters" -gt 0 ]; then echo "→ A Session is up. Run make down when you're finished."; \
+	else echo "→ Nothing is running."; fi
+
 # Everything `make up` needs, checked before anything touches AWS.
 .PHONY: preflight
 preflight:

@@ -4,6 +4,16 @@ Collects the current weather for Mudgeeraba, QLD from [Open-Meteo](https://open-
 
 Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CONTEXT.md](CONTEXT.md). Architectural decisions are in [docs/adr](docs/adr).
 
+## Coming back
+
+```sh
+make status                   # is anything still running from last time?
+aws login --profile weather   # credentials expire; log in again
+make up                       # Docker must be running; read the plan, then yes
+                              # click the "AWS Notification - Subscription Confirmation" email
+make down                     # when finished; takes about 5 minutes, let it complete
+```
+
 ## Status
 
 - [x] Collector fetches the current Observation from Open-Meteo
@@ -218,10 +228,25 @@ make down                     # shows what will be destroyed and asks
 
 This removes everything, including ECR images, logs and Observations. Task definitions are deregistered rather than deleted, so `local-weather:<n>` stays listed as INACTIVE in the ECS console. CloudWatch metrics can't be deleted; they expire on their own.
 
+### Cost
+
+While a Session is up it costs roughly US$0.40 a day, almost all of it the serve task running all the time (Fargate plus its public IPv4 address). Left up for a month that's about US$12.
+
+| Item | Roughly |
+|---|---|
+| serve task (always on) | ~US$0.015 an hour |
+| collect and watchdog (8 short tasks an hour, each billed as at least 1 minute) | a few cents a day |
+| DynamoDB, ECR, CloudWatch Logs, SQS, SNS | cents a month |
+| CloudWatch metric and two alarms | under US$1 a month, charged only while they exist |
+| VPC, subnets, internet gateway (no NAT gateway) | free |
+
+Nothing costs anything after `make down`. A US$5 monthly budget in the Billing console emails if spending goes over; it lives outside Terraform and is never destroyed.
+
 ### AWS make targets
 
 | Target | Does |
 | --- | --- |
+| `status` | Whether anything from this project is running in AWS |
 | `up` / `down` | Start or end a Session (`up` = `preflight`, `ecr-repo`, `push`, `tf-apply`) |
 | `preflight` | Check `terraform.tfvars`, the AWS login and Docker |
 | `ecr-repo` | Create only the ECR repository, so there is somewhere to push |
@@ -243,6 +268,21 @@ This removes everything, including ECR images, logs and Observations. Task defin
 The API only accepts connections from the IP that ran `make tf-apply`. If your IP changes (new network, hotspot), the `aws-*` targets time out; run `make tf-apply` again to update the rule.
 
 Terraform state is local (`infra/terraform.tfstate`, gitignored); the provider lock file is committed.
+
+## Things to look out for
+
+- **`make down` takes 3–6 minutes.** Removing the serve service waits for ECS to drain it, and the subnets wait for its network interface to be cleaned up. Don't press Ctrl+C; if it times out, run `make down` again and it carries on.
+- **Check `make down` actually finished.** It only ends with `Destroy complete!`. If you're unsure, `make status`.
+- **Network errors like `no such host`** come from your connection, not AWS or Terraform. Check you're online and re-run; nothing is half-applied when this happens during the refresh.
+- **`aws login` expires.** Errors about expired or missing credentials mean `aws login --profile weather` again.
+- **The SNS confirmation email comes every Session.** The subscription is recreated by each `make up`; alarms aren't delivered until it's clicked.
+- **An "OK" alarm email at the start of every Session is normal.** A new alarm starts as INSUFFICIENT_DATA and emails when its first check moves it to OK.
+- **Old log lines and metric readings can appear in a new Session.** CloudWatch deletes them in the background, and metrics are never deleted (they expire), so the new alarm may find the last Session's readings.
+- **`make aws-*` hangs or times out** when your public IP has changed (new network, hotspot). `make tf-apply` updates the firewall rule.
+- **Changed `package.json` or the Dockerfile?** Run `make image` before `make test`, `make collect` and friends; the container uses the dependencies baked into the image. `src/` changes need no rebuild.
+- **Image tags follow the last commit to the image's inputs.** After changing `app/src`, `app/package*.json` or the Dockerfile during a Session: commit, `make push`, `make tf-apply`. A plan showing `-dirty` in the image tag means there are uncommitted changes to those files.
+- **A plan that wants to replace the task definition** is normal after an image or environment change; task definitions can't be edited, so each change makes a new revision. A plan that wants to destroy the table or VPC is not normal: answer `no` and find out why.
+- **Never enable IAM Identity Center or AWS Organizations on this account.** Creating an organization switches the free plan to paid and ends the credits.
 
 ## Tests
 
