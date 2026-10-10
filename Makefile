@@ -101,15 +101,15 @@ tf-init:
 
 .PHONY: tf-plan
 tf-plan:
-	@$(TF) plan
+	@$(TF) plan -var image_tag=$(TAG)
 
 .PHONY: tf-apply
 tf-apply:
-	@$(TF) apply
+	@$(TF) apply -var image_tag=$(TAG)
 
 .PHONY: tf-destroy
 tf-destroy:
-	@$(TF) destroy
+	@$(TF) destroy -var image_tag=$(TAG)
 
 REGISTRY = 420653187671.dkr.ecr.ap-southeast-2.amazonaws.com
 ECR_URL = $(REGISTRY)/local-weather
