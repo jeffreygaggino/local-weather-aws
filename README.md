@@ -13,7 +13,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - [x] Container image (arm64, runs `serve`, `collect` or `check`)
 - [x] Terraform: DynamoDB, ECR (image pushed by hand)
 - [x] ECS Fargate task, run by hand (`make run-collect`)
-- [ ] ECS service for the API
+- [x] ECS service keeping the API running (port 8080, your IP only)
 - [ ] EventBridge Scheduler and dead-letter queue
 - [ ] Alarms and budget
 - [ ] `make up` / `make down`, CI
@@ -124,6 +124,7 @@ make push                     # build the arm64 image and push it, tagged with t
 make run-collect              # run collect once as a Fargate task
 make logs                     # follow task logs (tasks take about a minute to start)
 make aws-db-history           # Observations in the real table
+make aws-latest               # the API, running as an ECS service
 ```
 
 `tf-apply` comes before `push` because the ECR repository has to exist before an image can be pushed to it. The task definition can refer to an image tag that hasn't been pushed yet; it only matters once a task runs.
@@ -149,6 +150,10 @@ Task definitions are deregistered rather than deleted, so `local-weather:<n>` st
 | `run-collect` | Run collect once as a Fargate task |
 | `logs` | Follow the task logs in CloudWatch |
 | `aws-db-history` | Observations in the real table |
+| `ip` | Public IP of the running serve task (changes whenever the task is replaced) |
+| `aws-health` / `aws-latest` / `aws-history` | Call the API in AWS (`make aws-history HOURS=2`) |
+
+The API only accepts connections from the IP that ran `make tf-apply`. If your IP changes (new network, hotspot), the `aws-*` targets time out; run `make tf-apply` again to update the rule.
 
 Terraform state is local (`infra/terraform.tfstate`, gitignored); the provider lock file is committed.
 
