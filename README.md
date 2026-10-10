@@ -47,6 +47,7 @@ Container config lives in [`app/local.env`](app/local.env). `DYNAMODB_ENDPOINT` 
 | --- | --- |
 | `install` | `npm install` in `app/` |
 | `typecheck` | Typecheck the app |
+| `test` | Run the tests in the container (unit tests plus the store against DynamoDB Local) |
 | `image` | Build the arm64 image `local-weather:dev` |
 | `local` | Start DynamoDB Local and create the table |
 | `local-down` | Stop DynamoDB Local |
@@ -79,6 +80,8 @@ app/
 │   ├── check.ts                 entrypoint: Watchdog, measures Observation Age
 │   ├── serve.ts                 entrypoint: HTTP API
 │   └── lib/
+│       ├── api.ts               HTTP routes (createApi), independent of where data comes from
+│       ├── observationAge.ts    Observation Age calculation
 │       ├── openMeteoClient.ts   client: Open-Meteo API
 │       ├── observationStore.ts  store: Observations table in DynamoDB
 │       ├── observation.ts       type: Observation
@@ -86,10 +89,20 @@ app/
 │       └── env.ts               config helpers
 ├── scripts/
 │   └── create-local-table.ts    creates the table in DynamoDB Local
+├── test/                        node:test suites, mounted into the container (not in the image)
 └── local.env                    container config for local runs
 ```
 
 Naming: `*Client.ts` talks to an external API, `*Store.ts` reads and writes a table, plain nouns are types. Entrypoints only wire these together.
+
+## Tests
+
+```sh
+make local   # the store tests need DynamoDB Local
+make test
+```
+
+Tests use Node's built-in runner (`node:test`) and run in the container. The Open-Meteo client is tested against a mocked `fetch`, the API through `createApi` with fake data functions (no server or database), and the store against DynamoDB Local in a throwaway table that is deleted afterwards.
 
 ## API
 

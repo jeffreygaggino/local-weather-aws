@@ -25,6 +25,10 @@ install:
 typecheck:
 	@cd app && npm run -s typecheck
 
+.PHONY: test
+test:
+	@$(RUN) app node --test --test-reporter=spec "test/**/*.test.ts"
+
 .PHONY: local
 local:
 	@docker compose --progress quiet up -d --wait

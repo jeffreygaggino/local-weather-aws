@@ -19,6 +19,7 @@ services:
     volumes:
       - ./app/src:/app/src:ro
       - ./app/scripts:/app/scripts:ro
+      - ./app/test:/app/test:ro
     ports:
       - "8080:8080"
     depends_on:

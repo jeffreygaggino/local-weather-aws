@@ -1,12 +1,12 @@
 import { requireEnv } from "./lib/env.ts";
+import { observationAgeMinutes } from "./lib/observationAge.ts";
 import { latestObservation, sessionStartedAt } from "./lib/observationStore.ts";
 
 const table = requireEnv("TABLE");
 const location = requireEnv("LOCATION");
 
 const latest = await latestObservation(table, location);
-const since = latest ? new Date(latest.ts) : await sessionStartedAt(table);
-const ageMinutes = (Date.now() - since.getTime()) / 60_000;
+const ageMinutes = observationAgeMinutes(latest, await sessionStartedAt(table));
 
 console.log(
   JSON.stringify({
