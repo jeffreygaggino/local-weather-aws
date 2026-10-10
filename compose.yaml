@@ -8,3 +8,19 @@ services:
       test: ["CMD", "curl", "-s", "-o", "/dev/null", "http://localhost:8000"]
       interval: 1s
       retries: 10
+
+  app:
+    image: local-weather:dev
+    build:
+      context: .
+      platforms: ["linux/arm64"]
+    profiles: ["app"]
+    env_file: app/local.env
+    volumes:
+      - ./app/src:/app/src:ro
+      - ./app/scripts:/app/scripts:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      dynamodb:
+        condition: service_healthy

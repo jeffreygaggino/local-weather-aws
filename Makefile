@@ -1,7 +1,11 @@
 include app/local.env
 
+IMAGE = local-weather:dev
+RUN = docker compose --progress quiet run --rm
+
+# local.env is the container's view (dynamodb:8000); from the Mac, DynamoDB Local is on localhost.
 DDB = AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) \
-	aws dynamodb --endpoint-url $(DYNAMODB_ENDPOINT) --region $(AWS_REGION)
+	aws dynamodb --endpoint-url http://localhost:8000 --region $(AWS_REGION)
 
 HOURS ?= 6
 
@@ -23,24 +27,29 @@ typecheck:
 
 .PHONY: local
 local:
-	@docker compose up -d --wait
-	@cd app && npm run -s db:create
+	@docker compose --progress quiet up -d --wait
+	@$(RUN) app node scripts/create-local-table.ts
 
 .PHONY: local-down
 local-down:
 	@docker compose down
 
-.PHONY: collect
-collect:
-	@cd app && npm run -s collect
-
-.PHONY: check
-check:
-	@cd app && npm run -s check
+# src/ is mounted into the container, so only dependency or Dockerfile changes need a rebuild.
+.PHONY: image
+image:
+	@docker buildx build --platform linux/arm64 -t $(IMAGE) --load --quiet . >/dev/null
 
 .PHONY: serve
 serve:
-	@cd app && npm run -s serve
+	@$(RUN) --service-ports app node --watch src/serve.ts
+
+.PHONY: collect
+collect:
+	@$(RUN) app node src/collect.ts
+
+.PHONY: check
+check:
+	@$(RUN) app node src/check.ts
 
 
 # ── Call the local API (run `make serve` in another terminal) ────────────────

@@ -6,10 +6,6 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "collect": "node --env-file=local.env src/collect.ts",
-    "check": "node --env-file=local.env src/check.ts",
-    "serve": "node --env-file=local.env --watch src/serve.ts",
-    "db:create": "node --env-file=local.env scripts/create-local-table.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

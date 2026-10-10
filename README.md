@@ -10,7 +10,7 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - [x] Observations stored in DynamoDB (local)
 - [x] API: `/health`, `/latest`, `/history`
 - [x] Watchdog: computes Observation Age (publishing to CloudWatch comes with the alarms)
-- [ ] Container image
+- [x] Container image (arm64, runs `serve`, `collect` or `check`)
 - [ ] Terraform: DynamoDB, ECR
 - [ ] ECS Fargate task and service
 - [ ] EventBridge Scheduler and dead-letter queue
@@ -19,24 +19,27 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 
 ## Prerequisites
 
-- Node 22.18+ (runs the TypeScript directly, no build step)
-- Docker, for DynamoDB Local
+- Docker (the app and DynamoDB Local both run in containers)
+- Node 22.18+ and npm, for typechecking and editor support
 - AWS CLI, for inspecting tables
 - jq, for pretty-printing API responses
 
 ## Local development
 
+Everything runs in Docker, using the same image ECS runs. `app/src` is mounted into the container, so code changes take effect without a rebuild.
+
 ```sh
-make install     # npm install in app/
+make install     # npm install in app/ (editor + typecheck)
+make image       # build local-weather:dev (again after changing dependencies or the Dockerfile)
 make local       # start DynamoDB Local and create the table
 make collect     # fetch and store one Observation
-make db-history  # list stored Observations, newest first
-make serve       # run the API on :8080, restarting on file changes
+make check       # Watchdog: print Observation Age
+make serve       # API on :8080, restarts when src/ changes
 make latest      # in another terminal: GET /latest
 make local-down  # stop DynamoDB Local (data is in-memory and is discarded)
 ```
 
-Local config lives in [`app/local.env`](app/local.env). `DYNAMODB_ENDPOINT` points the SDK at DynamoDB Local. In AWS it is unset, and credentials come from the ECS task role.
+Container config lives in [`app/local.env`](app/local.env). `DYNAMODB_ENDPOINT` points the SDK at the `dynamodb` Compose service; in AWS it is unset, and credentials come from the ECS task role.
 
 ### Make targets
 
@@ -44,15 +47,28 @@ Local config lives in [`app/local.env`](app/local.env). `DYNAMODB_ENDPOINT` poin
 | --- | --- |
 | `install` | `npm install` in `app/` |
 | `typecheck` | Typecheck the app |
+| `image` | Build the arm64 image `local-weather:dev` |
 | `local` | Start DynamoDB Local and create the table |
 | `local-down` | Stop DynamoDB Local |
 | `collect` | Fetch the current Observation and store it |
 | `check` | Run the Watchdog: print Observation Age |
-| `serve` | Run the API locally with `--watch` |
+| `serve` | Run the API with `--watch` |
 | `health` / `latest` / `history` | Call the local API (`make history HOURS=2`) |
 | `db-scan` | Every item in the table, raw DynamoDB format |
 | `db-latest` | Newest Observation for the Location |
 | `db-history` | All Observations for the Location, newest first |
+
+## Container
+
+One image runs every mode; the command picks which one:
+
+| Mode | Command | In AWS |
+| --- | --- | --- |
+| serve | `node src/serve.ts` (default) | ECS service |
+| collect | `node src/collect.ts` | Scheduled task |
+| check | `node src/check.ts` | Scheduled task (Watchdog) |
+
+Node runs the TypeScript directly, so there is no build step and the image contains `src/` as written. It is built for `linux/arm64` to match Graviton Fargate.
 
 ## Code layout
 
@@ -70,7 +86,7 @@ app/
 │       └── env.ts               config helpers
 ├── scripts/
 │   └── create-local-table.ts    creates the table in DynamoDB Local
-└── local.env                    local config
+└── local.env                    container config for local runs
 ```
 
 Naming: `*Client.ts` talks to an external API, `*Store.ts` reads and writes a table, plain nouns are types. Entrypoints only wire these together.
