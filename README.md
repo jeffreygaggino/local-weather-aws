@@ -19,6 +19,82 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - [x] `make up` / `make down`
 - [ ] CI: typecheck, tests and `terraform validate` on every push
 
+## How it fits together
+
+```mermaid
+flowchart LR
+  subgraph aws["AWS · ap-southeast-2"]
+    sched["EventBridge Scheduler<br/>collect :02 :17 :32 :47<br/>watchdog :09 :24 :39 :54"]
+    dlq[("SQS dead-letter queue")]
+    ecr[("ECR<br/>container image")]
+
+    subgraph ecs["ECS cluster · VPC public subnets in 2a and 2b"]
+      collect["collect task<br/>one-off"]
+      check["watchdog task<br/>one-off"]
+      serve["serve task<br/>ECS service, always 1"]
+    end
+
+    igw{{"Internet gateway"}}
+    ddb[("DynamoDB<br/>Observations")]
+    logs[("CloudWatch Logs")]
+    metric[("CloudWatch metric<br/>ObservationAgeMinutes")]
+    alarms["CloudWatch alarms<br/>stale · dead-letter"]
+    sns["SNS topic"]
+  end
+
+  meteo["Open-Meteo API"]
+  client["API client"]
+  email["Email subscriber"]
+
+  sched -->|"RunTask (scheduler role)"| collect
+  sched -->|"RunTask (scheduler role)"| check
+  sched -.->|"failed to start"| dlq
+
+  collect --> igw
+  check --> igw
+  serve --> igw
+  igw -->|"pull image (execution role)"| ecr
+  igw -->|"stdout (execution role)"| logs
+  igw -->|"read / write (task role)"| ddb
+  igw -->|"Observation Age (task role)"| metric
+  igw -->|"current weather"| meteo
+
+  client -->|"HTTP :8080, allowed IP only"| igw
+  metric --> alarms
+  dlq --> alarms
+  alarms -->|"state change"| sns
+  sns --> email
+```
+
+**What happens every 15 minutes**
+
+| Time | What | Result |
+|---|---|---|
+| :00 | A new Open-Meteo Slot opens | |
+| :02 | Scheduler starts a **collect** task | Fetches the Slot and writes an Observation to DynamoDB, then stops |
+| :09 | Scheduler starts a **watchdog** task | Measures Observation Age (about 9 when healthy) and publishes it to CloudWatch, then stops |
+| always | **serve** answers `/latest` and `/history` | Reads DynamoDB |
+| every minute | The **stale alarm** checks the newest Observation Age | Over 35 minutes → email; no readings at all → email; back to normal → email |
+
+Each scheduled run is a brand-new Fargate task with its own network card and public IP. Only serve stays running.
+
+**Who is allowed to do what**
+
+| Role | Used by | Allows | If it's wrong |
+|---|---|---|---|
+| Execution role | ECS, starting any task | Pull the image from ECR, write logs | Task never starts; stuck pulling the image |
+| Task role | Your code, while it runs | DynamoDB on the one table; publish metrics to `LocalWeather` | Task starts, then fails with `AccessDeniedException` |
+| Scheduler role | EventBridge Scheduler | Start tasks, hand them the two roles above (`iam:PassRole`), write to the dead-letter queue | No task starts; the reason lands in `make dlq` |
+
+**Where to look when something's off**
+
+| Symptom | Check |
+|---|---|
+| No new Observations | `make dlq` (scheduler couldn't start it), then `make logs` (it started and failed) |
+| `make aws-*` hangs | Your IP changed; run `make tf-apply` to update the firewall rule |
+| No alarm emails | Click the SNS confirmation email; it's needed every Session |
+| Task stuck in PENDING, then stopped | It can't pull the image: check the image tag was pushed (`make ecr-images`) |
+
 ## Prerequisites
 
 - Docker (the app and DynamoDB Local both run in containers)
