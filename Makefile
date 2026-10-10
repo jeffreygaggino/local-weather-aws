@@ -27,7 +27,7 @@ typecheck:
 
 .PHONY: test
 test:
-	@$(RUN) app node --test --test-reporter=spec "test/**/*.test.ts"
+	@$(RUN) app npm test --silent
 
 .PHONY: local
 local:
@@ -96,6 +96,34 @@ TF = terraform -chdir=infra
 # so Terraform-only or docs commits keep the same tag and need no push.
 IMAGE_INPUTS = Dockerfile .dockerignore app/package.json app/package-lock.json app/src
 TAG := $(shell git log -1 --format=%h -- $(IMAGE_INPUTS))$(shell [ -n "$$(git status --porcelain -- $(IMAGE_INPUTS))" ] && echo -dirty)
+
+# ── Sessions ──────────────────────────────────────────────────────────────────
+
+# Runs left to right: check, create ECR, push the image, then the full apply (shows its plan and asks).
+.PHONY: up
+up: preflight ecr-repo push tf-apply
+	@echo
+	@echo "Session is up. Click the SNS confirmation email to receive alarms."
+
+.PHONY: down
+down: tf-destroy
+
+# Everything `make up` needs, checked before anything touches AWS.
+.PHONY: preflight
+preflight:
+	@test -f infra/terraform.tfvars || { echo "Copy infra/terraform.tfvars.example to infra/terraform.tfvars and set alert_email"; exit 1; }
+	@aws sts get-caller-identity >/dev/null || { echo "Run: aws login --profile $(AWS_PROFILE)"; exit 1; }
+	@docker info >/dev/null 2>&1 || { echo "Start Docker first"; exit 1; }
+
+# Just the ECR repository, so there's somewhere to push before the full apply.
+# No prompt: it can only create one empty repository.
+.PHONY: ecr-repo
+ecr-repo:
+	@$(TF) init -input=false >/dev/null
+	@$(TF) apply -var image_tag=$(TAG) -target=aws_ecr_repository.app -auto-approve >/dev/null
+
+
+# ── Terraform, step by step ───────────────────────────────────────────────────
 
 .PHONY: tf-init
 tf-init:

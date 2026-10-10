@@ -15,8 +15,9 @@ Domain terms (Location, Observation, Slot, Session, Watchdog) are defined in [CO
 - [x] ECS Fargate task, run by hand (`make run-collect`)
 - [x] ECS service keeping the API running (port 8080, your IP only)
 - [x] EventBridge Scheduler runs collect every 15 minutes, with a dead-letter queue
-- [ ] Alarms and budget
-- [ ] `make up` / `make down`, CI
+- [x] Watchdog publishes Observation Age to CloudWatch every 15 minutes; alarms email through SNS
+- [x] `make up` / `make down`
+- [ ] CI: typecheck, tests and `terraform validate` on every push
 
 ## Prerequisites
 
@@ -111,7 +112,8 @@ Everything in AWS is created and destroyed together; a Session is the time betwe
    aws login --profile weather
    aws sts get-caller-identity --profile weather   # Arn should end in :user/<you>
    ```
-4. Download the Terraform provider: `make tf-init`.
+4. Copy `infra/terraform.tfvars.example` to `infra/terraform.tfvars` (gitignored) and set `alert_email`.
+5. Download the Terraform providers: `make tf-init`.
 
 `REGISTRY` in the Makefile contains the AWS account ID; change it if you use a different account.
 
@@ -119,30 +121,34 @@ Everything in AWS is created and destroyed together; a Session is the time betwe
 
 ```sh
 aws login --profile weather   # if the previous login has expired
-make tf-apply                 # network, IAM roles, table, ECR repository, cluster, task definition
-make push                     # build the arm64 image and push it, tagged with the git SHA
-make run-collect              # run collect once as a Fargate task
-make logs                     # follow task logs; collect runs on its own at :02, :17, :32 and :47
-make aws-db-history           # Observations in the real table
-make aws-latest               # the API, running as an ECS service
+make up                       # creates ECR, pushes the image, then shows the full plan and asks
 ```
 
-`tf-apply` comes before `push` because the ECR repository has to exist before an image can be pushed to it. The task definition can refer to an image tag that hasn't been pushed yet; it only matters once a task runs.
+Then click the SNS confirmation email to receive alarms. Collect runs at :02, :17, :32 and :47, and the Watchdog at :09, :24, :39 and :54.
 
-The image tag is the hash of the last commit that changed the image's inputs (`app/src`, `app/package*.json`, `Dockerfile`, `.dockerignore`). After changing any of those, commit, then `make push`, then `make tf-apply`. Commits that only touch Terraform or docs keep the same tag, so `make tf-apply` alone is enough. Uncommitted changes to the image inputs make the tag end in `-dirty`.
+```sh
+make logs                     # follow task logs
+make aws-latest               # the newest Observation, served from AWS
+make alarms                   # both alarms and their state
+```
+
+The image tag is the hash of the last commit that changed the image's inputs (`app/src`, `app/package*.json`, `Dockerfile`, `.dockerignore`). During a Session, after changing any of those: commit, `make push`, `make tf-apply`. After changing only Terraform: `make tf-apply`.
 
 ### Ending a Session
 
 ```sh
-make tf-destroy               # removes everything, including ECR images, logs and Observations
+make down                     # shows what will be destroyed and asks
 ```
 
-Task definitions are deregistered rather than deleted, so `local-weather:<n>` stays listed as INACTIVE in the ECS console; the next apply creates the next revision.
+This removes everything, including ECR images, logs and Observations. Task definitions are deregistered rather than deleted, so `local-weather:<n>` stays listed as INACTIVE in the ECS console. CloudWatch metrics can't be deleted; they expire on their own.
 
 ### AWS make targets
 
 | Target | Does |
 | --- | --- |
+| `up` / `down` | Start or end a Session (`up` = `preflight`, `ecr-repo`, `push`, `tf-apply`) |
+| `preflight` | Check `terraform.tfvars`, the AWS login and Docker |
+| `ecr-repo` | Create only the ECR repository, so there is somewhere to push |
 | `tf-init` | Download the Terraform provider (once per clone) |
 | `tf-plan` / `tf-apply` / `tf-destroy` | Plan, create or remove the stack, tagged with the current git SHA |
 | `push` | Log in to ECR, build the arm64 image and push it |
@@ -153,6 +159,10 @@ Task definitions are deregistered rather than deleted, so `local-weather:<n>` st
 | `ip` | Public IP of the running serve task (changes whenever the task is replaced) |
 | `aws-health` / `aws-latest` / `aws-history` | Call the API in AWS (`make aws-history HOURS=2`) |
 | `dlq` | Why the scheduler failed to start a task, if it has (empty means no failures) |
+| `run-check` | Run the Watchdog once now, instead of waiting for :09, :24, :39 or :54 |
+| `age` | Observation Age as CloudWatch has it, over the last 2 hours |
+| `alarms` | Both alarms and their current state |
+| `alarm-test` | Force the stale alarm into ALARM to test the email; it returns to its real state at the next check |
 
 The API only accepts connections from the IP that ran `make tf-apply`. If your IP changes (new network, hotspot), the `aws-*` targets time out; run `make tf-apply` again to update the rule.
 
@@ -178,3 +188,10 @@ Tests use Node's built-in runner (`node:test`) and run in the container. The Ope
 ## Data model
 
 One DynamoDB table, keyed by `location` (partition key) and `ts` (sort key, the Slot start in UTC ISO 8601). Open-Meteo's current conditions change every 15 minutes, so each Location has at most one Observation per Slot. Collecting twice in the same Slot overwrites rather than duplicates.
+
+## Stretch goals
+
+- Monthly budget in Terraform (one exists in the console, created by hand)
+- Build and deploy from GitHub Actions with OIDC (no AWS keys)
+- Private subnets with VPC endpoints instead of public IPs
+- Swap the hand-written VPC and scheduler for the `terraform-aws-modules` versions
